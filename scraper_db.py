@@ -4,18 +4,18 @@ import os
 def get_band_image(band):
     url = 'https://en.wikipedia.org/wiki/' + band.replace(" ", "%20")
     r = requests.get(url)
-    #print(r.text)
     lines = r.text.split("\n")
     image = None
     for line in lines:
-        if 'https://' in line and ('.jpg' in line or '.png' in line or '.jpeg' in line):
-            #print(line)
+        line = line.replace('//upload.wikimedia.org/', 'https://upload.wikimedia.org/')
+        if 'https://' in line and ('.jpg' in line.lower() or '.png' in line.lower() or '.jpeg' in line.lower()):
             tokens = line.split("\"")
+            #print(tokens)
             for token in tokens:
                 #print(token)
                 if len(token) == 0: continue
-                if token[-1] != 'g': continue
-                if ".jpg" in token and 'https://' in token:
+                if token[-1].lower() != 'g': continue
+                if ".jpg" in token.lower() and 'https://' in token:
                     band_names = band.split(" ")
                     isvalid = True
                     for band_name in band_names:
@@ -23,10 +23,12 @@ def get_band_image(band):
                     isvalid = True # accept any picture - this will usually be the main article picture
                     if isvalid:
                         image = token.replace("\n","").strip()
-        #            print(token)
     return image
 
 def find_matching_bands(initials, text):
+    bad_bands = ["Bee", "Good", "Radio", "That", "Moat", "Egg", "Mist", "Black", "Tea", "Musician", "Well", "Shed",
+                 "Police", "Sex", "Attic", "Ink", "Walmart", "Bus", "Ember", "Bag", "Fur", "Crow", "Dodgy", "Rose",
+                 "Man", "Echo", "Rolling Stone", "Boy", "Star", "Anne", "Orbit", "Hotel", "Brie", "Stephen", "Squirrel", "Allah"]
     text = text.replace("\\n"," ")
     remove_chars = ["?", ":", "-", ".", ",", "_", "!",")","(","\"","'"]
     for char in remove_chars:
@@ -44,6 +46,8 @@ def find_matching_bands(initials, text):
 
         if slice_initials == initials:
             # Join the slice of words back into a phrase and add it to the list
+            band = ' '.join(slice_of_words)
+            if band.title() in bad_bands: continue
             matching_phrases.append(' '.join(slice_of_words))
     return matching_phrases  # Return the list of all matching phrases
 
@@ -59,11 +63,18 @@ urls = []
 f = open('database.txt', 'r', encoding='utf-8')
 lines = f.readlines()
 for line in lines:
+    if "|" not in line: continue
+    if len(line.split("|")) < 5: continue
+    print(line)
     url = line.split("|")[5]
     if url not in urls: urls.append(url)
-lastline = lines[-1]
-last_id = lastline.split("|")[0]
-
+last_id = -1
+current_db_id = -1
+for line in reversed(lines):
+    if "|" not in line: continue
+    last_id = line.split("|")[0]
+    current_db_id = int(last_id) + 1
+    break
 # get all comments
 
 comments_data = []
@@ -131,7 +142,7 @@ for post in posts_data:
     else:
         if len(title.split(" ")[-1]) <= 6:
             initials = title.split(" ")[-1]
-    if initials == None: continue
+    if initials is None: continue
     if initials.upper() != initials: continue
     initials = initials.upper()
     initials = initials.replace(".","").replace(",","").replace("-","").replace(" ","")
@@ -147,22 +158,25 @@ for post in posts_data:
             if match not in bands:
                 match = match.title()
                 print("Found new potential band:", match)
+                if len(match) < 3: continue
                 page = ''
                 title = ''
-                try:
-                    page = wikipedia.page(match, auto_suggest=False)
-                    title = page.title
-                except:
-                    continue
-                if title != match: continue
-                match_phrases = ['band', 'musician', 'singer', 'rock', 'guitarist', 'pianist']
-                matched_phrase = False
-                for phrase in match_phrases:
-                    if phrase in page.content:
-                        # found new bound
-                        matched_phrase = True
+                suffixes = ["", " (band)", " (American band)", " (British band)", " (Canadian band)", " (Australian band)", " (musician)", " (singer)", " (guitarist)"]
+                page_match = False
+                for suffix in suffixes:
+                    try:
+                        page = wikipedia.page(match + suffix, auto_suggest=False)
+                        title = page.title
+                        page_match = True
                         break
-                if matched_phrase:
+                    except:
+                        page_match = False
+                if not page_match: continue
+                orig_match = match
+                match = title
+                if " (" in match: match = match.split(" (")[0]
+                if orig_match != match: continue
+                else:
                     image = get_band_image(match)
                     print("Found new band:", match)
                     print("Image:", image)
@@ -226,7 +240,7 @@ for post in posts_data:
     db_string += "|" + post['permalink']
     db_string += "|" + OP_name
     db_string += "|" + band_images[correct_answer]
-    db_string = db_string.replace("\n","")
+    db_string = db_string.replace("\n","<br>")
     print("!!!!!!!!!!!!!!!!!!!!!")
     ff = open("new_database.txt", "a", encoding='utf-8')
     ff.write(db_string + "\n")
