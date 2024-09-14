@@ -6,18 +6,18 @@ from datetime import datetime
 def get_band_image(band):
     url = 'https://en.wikipedia.org/wiki/' + band.replace(" ", "%20")
     r = requests.get(url)
-    #print(r.text)
     lines = r.text.split("\n")
     image = None
     for line in lines:
-        if 'https://' in line and ('.jpg' in line or '.png' in line or '.jpeg' in line):
-            #print(line)
+        line = line.replace('//upload.wikimedia.org/', 'https://upload.wikimedia.org/')
+        if 'https://' in line and ('.jpg' in line.lower() or '.png' in line.lower() or '.jpeg' in line.lower()) and 'archive.' not in line.lower():
             tokens = line.split("\"")
+            #print(tokens)
             for token in tokens:
                 #print(token)
                 if len(token) == 0: continue
-                if token[-1] != 'g': continue
-                if ".jpg" in token and 'https://' in token:
+                if token[-1].lower() != 'g': continue
+                if ".jpg" in token.lower() and 'https://' in token:
                     band_names = band.split(" ")
                     isvalid = True
                     for band_name in band_names:
@@ -25,7 +25,6 @@ def get_band_image(band):
                     isvalid = True # accept any picture - this will usually be the main article picture
                     if isvalid:
                         image = token.replace("\n","").strip()
-        #            print(token)
     return image
 
 def find_matching_bands(initials, text):
@@ -59,15 +58,18 @@ def acceptable_name(name):
     return True
 
 def scrape_reddit(reddit, bands, band_images):
-    os.system("copy database.txt database_new.txt")
-    myfile = open('database.txt', 'r', encoding='utf-8')
+    homedir = '/home/jimmyrustles/mysite/'
+    os.system("cp " + homedir + "database.txt " + homedir + "database_new.txt")
+    myfile = open(homedir + 'database.txt', 'r', encoding='utf-8')
     lines = myfile.readlines()
     myfile.close()
-    lastline = lines[-1]
-    last_id = lastline.split("|")[0]
-    current_db_id = int(last_id) + 1
+    for line in reversed(lines):
+        if "|" not in line: continue
+        last_id = line.split("|")[0]
+        current_db_id = int(last_id) + 1
+        break
     already_done = []
-    new_db_file = open('database_new.txt', 'a', encoding='utf-8')
+    new_db_file = open(homedir + 'database_new.txt', 'a', encoding='utf-8')
     new_clues_count = 0
     new_bands_count = 0
     for line in lines:
@@ -75,7 +77,7 @@ def scrape_reddit(reddit, bands, band_images):
         tokens = line.split("|")
         if len(tokens) < 6: continue
         already_done.append(tokens[5])  # url
-    hot_posts = reddit.subreddit('rockbusters').new(limit=1000)
+    hot_posts = reddit.subreddit('rockbusters').new(limit=50)
     for post in hot_posts:
         if not hasattr(post.author, 'name'): continue
         title = post.title
@@ -114,9 +116,9 @@ def scrape_reddit(reddit, bands, band_images):
             author = comment[1]
             matches = find_matching_bands(initials, body)
             for match in matches:
+                match = match.title()
                 if match not in bands:
                     if len(match) < 4: continue
-                    match = match.title()
                     print("Found new potential band:", match)
                     page = ''
                     title = ''
@@ -131,7 +133,17 @@ def scrape_reddit(reddit, bands, band_images):
                         except:
                             page_match = False
                     if not page_match: continue
-                    else:
+                    if " (" in title: title = title.split(" (")[0]
+                    if title.lower() != match.lower(): continue
+                    match = title
+                    match_phrases = ['band', 'musician', 'singer', 'rock', 'guitarist', 'pianist', 'guitar', 'hip hop', 'hip-hop']
+                    matched_phrase = False
+                    for phrase in match_phrases:
+                        if phrase in page.content.split("\n")[0]:
+                            # found new bound
+                            matched_phrase = True
+                            break
+                    if matched_phrase:
                         image = get_band_image(match)
                         print("Found new band:", match)
                         print("Image:", image)
@@ -190,6 +202,7 @@ def scrape_reddit(reddit, bands, band_images):
         current_db_id += 1
         db_string = ""
         db_string += str(current_db_id)
+        print("post title:", post_title)
         db_string += "|" + post_title
         db_string += "|" + initials
         db_string += "|" + correct_answer
@@ -197,32 +210,34 @@ def scrape_reddit(reddit, bands, band_images):
         db_string += "|" + permalink
         db_string += "|" + OP_name
         db_string += "|" + band_images[correct_answer]
+        db_string += "|" + post.score
         db_string = db_string.replace("\n","")
         db_string = db_string.replace("||","|")
         new_db_file.write(db_string + "\n")
         new_clues_count += 1
         print("!!!!!!!!!!!!!!!!!!!!!")
     new_db_file.close()
-    os.system("copy database_new.txt database.txt")
+    os.system("cp " + homedir + "database_new.txt " + homedir + "database.txt")
     print("Written database")
-    f = open('bands_wiki_new.txt','w')
+    f = open(homedir + 'bands_wiki_new.txt','w', encoding='utf-8', errors='ignore')
     for band in bands:
         band = band.replace("\n","")
         f.write(band + "\n")
     f.close()
     print("Written bands")
-    f = open('band_images.txt', 'w')
+    f = open(homedir + 'band_images.txt', 'w', encoding='utf-8', errors='ignore')
     for band in band_images:
+        if len(band) > 70: continue # stop bands with accented letters getting corrupted
         f.write(band + "|" + band_images[band] + "\n")
     f.close()
     print("Written band images")
-    f = open('rockbusters_updates.txt','a',encoding='utf-8')
+    f = open(homedir + 'rockbusters_updates.txt','a',encoding='utf-8', errors='ignore')
     current_date = datetime.today().date()
     f.write(str(current_date) + "|" + str(new_clues_count) + "," + str(new_bands_count) + "\n")
     f.close()
     pass
-
-credentials = 'client_secrets.json'
+homedir = '/home/jimmyrustles/mysite/'
+credentials = homedir + 'client_secrets.json'
 with open(credentials) as f:
     creds = json.load(f)
 
@@ -231,9 +246,9 @@ reddit = praw.Reddit(client_id=creds['client_id'],
                      user_agent=creds['user_agent'],
                      redirect_uri=creds['redirect_uri'],
                      refresh_token=creds['refresh_token'])
+homedir = '/home/jimmyrustles/mysite/'
 
-
-ff = open('bands_wiki_new.txt', 'r')
+ff = open(homedir + 'bands_wiki_new.txt', 'r', encoding='unicode_escape')
 read_bands = ff.readlines()
 ff.close()
 bands = []
@@ -243,7 +258,7 @@ for band in read_bands:
     if len(band) <= 3: acceptable = False
     if acceptable: bands.append(band)
 band_images = {}
-ff = open('band_images.txt', 'r')
+ff = open(homedir + 'band_images.txt', 'r', encoding='unicode_escape')
 read_bands = ff.readlines()
 ff.close()
 for line in read_bands:

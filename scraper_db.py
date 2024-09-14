@@ -240,6 +240,7 @@ for post in posts_data:
     db_string += "|" + post['permalink']
     db_string += "|" + OP_name
     db_string += "|" + band_images[correct_answer]
+    db_string += "|" + post['score']
     db_string = db_string.replace("\n","<br>")
     print("!!!!!!!!!!!!!!!!!!!!!")
     ff = open("new_database.txt", "a", encoding='utf-8')
